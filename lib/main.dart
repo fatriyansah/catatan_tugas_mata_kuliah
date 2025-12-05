@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'services/ai_service.dart';
 import 'assignment.dart';
 import 'database_helper.dart';
 import 'security_helper.dart';
@@ -475,8 +476,7 @@ class _AddEditPageState extends State<AddEditPage> {
     _courseC = TextEditingController(text: a?.course ?? 'Umum');
     _isDone = a?.isDone ?? false;
     _dueDate = DateTime.tryParse(a?.dueDate ?? '');
-    if (_dueDate == null)
-      _dueDate = DateTime.now().add(const Duration(days: 7));
+    _dueDate ??= DateTime.now().add(const Duration(days: 7));
   }
 
   @override
@@ -497,6 +497,43 @@ class _AddEditPageState extends State<AddEditPage> {
     );
     if (picked != null) setState(() => _dueDate = picked);
   }
+
+Future<void> _generateDescriptionAI() async {
+  if (_titleC.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Masukkan judul tugas terlebih dahulu'),
+      ),
+    );
+    return;
+  }
+
+  setState(() {});
+
+  final prompt = """
+Buatkan deskripsi tugas kuliah berdasarkan judul berikut:
+
+Judul: ${_titleC.text}
+
+Tuliskan dengan bahasa yang jelas, ringkas, dan rapi.
+""";
+
+  final result = await AIService.askGemini(prompt);
+
+  if (!mounted) return;
+
+  if (result.startsWith("ERROR")) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result)),
+    );
+    return;
+  }
+
+  setState(() {
+    _descC.text = result;
+  });
+}
+
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -540,12 +577,28 @@ class _AddEditPageState extends State<AddEditPage> {
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Judul wajib' : null,
               ),
+              // TextFormField(
+              //   controller: _descC,
+              //   decoration: const InputDecoration(
+              //     labelText: 'Deskripsi (opsional)',
+              //   ),
+              // ),
               TextFormField(
-                controller: _descC,
-                decoration: const InputDecoration(
-                  labelText: 'Deskripsi (opsional)',
-                ),
-              ),
+              controller: _descC,
+              decoration: const InputDecoration(
+                labelText: 'Deskripsi (opsional)',
+           ),
+          maxLines: 3,
+          ),
+
+const SizedBox(height: 8),
+
+ElevatedButton.icon(
+  onPressed: _generateDescriptionAI,
+  icon: const Icon(Icons.auto_awesome),
+  label: const Text('Generate Deskripsi dengan AI'),
+),
+
               TextFormField(
                 controller: _courseC,
                 decoration: const InputDecoration(
@@ -677,8 +730,9 @@ class AssignmentSearchDelegate extends SearchDelegate<Assignment?> {
         course: currentCourse == 'All' ? null : currentCourse,
       ),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done)
+        if (snap.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
+        }
         final data = snap.data ?? [];
         if (data.isEmpty) return const Center(child: Text('Tidak ada hasil.'));
         return ListView.separated(
@@ -717,16 +771,18 @@ class AssignmentSearchDelegate extends SearchDelegate<Assignment?> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    if (query.trim().isEmpty)
+    if (query.trim().isEmpty) {
       return const Center(child: Text('Ketik untuk mencari...'));
+    }
     return FutureBuilder<List<Assignment>>(
       future: DatabaseHelper.instance.searchAssignments(
         query,
         course: currentCourse == 'All' ? null : currentCourse,
       ),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done)
+        if (snap.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
+        }
         final items = snap.data ?? [];
         if (items.isEmpty) return const Center(child: Text('Tidak ada saran.'));
         return ListView.builder(
